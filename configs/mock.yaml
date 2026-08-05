@@ -1,0 +1,9 @@
+# Zero-setup config for the mock provider — no API keys, no network access.
+# Run: python -m arena.cli run --config configs/mock.yaml --tasks tasks/ --out results/mock
+models:
+  - name: mock-a
+    provider: mock
+    model: mock-a
+  - name: mock-b
+    provider: mock
+    model: mock-b
