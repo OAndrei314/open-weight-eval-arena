@@ -14,7 +14,7 @@ The open-weight frontier moved fast in the first half of 2026 (GLM-5.2, DeepSeek
 → K2.7 → K3, MiniMax M3, Qwen 3.5), and picking a model for a given workload increasingly means
 running your own evals rather than reading a benchmark table. This is a minimal, auditable
 version of that process: plain JSONL task files, pluggable scorers, pluggable model providers,
-markdown + chart output.
+markdown + chart output, and estimated cost-normalized ranking.
 
 ## How it works
 
@@ -30,6 +30,9 @@ configs/models.yaml  ─┘
   and is tested with zero API keys and zero network access.
 - **Scorers** are simple and inspectable on purpose: exact-match, keyword-coverage, and
   regex-rubric. No LLM-judge-grading-LLM circularity here.
+- **Cost estimates** use configurable USD-per-million-token rates plus deterministic token
+  estimates, so reports can compare score, latency, and score-per-dollar instead of raw
+  score alone.
 
 ## Quickstart
 
@@ -64,7 +67,13 @@ Add an entry to your config YAML:
   base_url: https://openrouter.ai/api/v1
   model: zhipu/glm-5.2
   api_key_env: OPENROUTER_API_KEY
+  input_cost_per_million: 0.0
+  output_cost_per_million: 0.0
 ```
+
+Fill the pricing fields with the current rates from your provider invoice or pricing page.
+The harness treats them as user-supplied assumptions and labels resulting costs as
+estimates.
 
 ## Status
 

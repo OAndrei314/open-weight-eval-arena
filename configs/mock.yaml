@@ -1,0 +1,13 @@
+# Zero-setup config for the mock provider — no API keys, no network access.
+# Run: python -m arena.cli run --config configs/mock.yaml --tasks tasks/ --out results/mock
+models:
+  - name: mock-a
+    provider: mock
+    model: mock-a
+    input_cost_per_million: 0.15
+    output_cost_per_million: 0.60
+  - name: mock-b
+    provider: mock
+    model: mock-b
+    input_cost_per_million: 0.05
+    output_cost_per_million: 0.20
