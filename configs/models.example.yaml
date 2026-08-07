@@ -7,24 +7,33 @@ models:
     base_url: https://openrouter.ai/api/v1
     model: zhipu/glm-5.2
     api_key_env: OPENROUTER_API_KEY
+    # Fill with current provider pricing in USD per million tokens.
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
 
   - name: deepseek-v4
     provider: openai_compat
     base_url: https://openrouter.ai/api/v1
     model: deepseek/deepseek-v4
     api_key_env: OPENROUTER_API_KEY
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
 
   - name: kimi-k3
     provider: openai_compat
     base_url: https://openrouter.ai/api/v1
     model: moonshotai/kimi-k3
     api_key_env: OPENROUTER_API_KEY
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
 
   - name: qwen-3.5
     provider: openai_compat
     base_url: https://openrouter.ai/api/v1
     model: qwen/qwen-3.5
     api_key_env: OPENROUTER_API_KEY
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0
 
   # Example local server (vLLM/Ollama with an OpenAI-compatible endpoint):
   - name: local-model
@@ -32,3 +41,5 @@ models:
     base_url: http://localhost:11434/v1
     model: llama4
     api_key_env: null
+    input_cost_per_million: 0.0
+    output_cost_per_million: 0.0

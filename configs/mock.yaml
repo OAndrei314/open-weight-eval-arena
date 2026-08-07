@@ -4,6 +4,10 @@ models:
   - name: mock-a
     provider: mock
     model: mock-a
+    input_cost_per_million: 0.15
+    output_cost_per_million: 0.60
   - name: mock-b
     provider: mock
     model: mock-b
+    input_cost_per_million: 0.05
+    output_cost_per_million: 0.20

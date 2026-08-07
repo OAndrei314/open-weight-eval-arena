@@ -25,6 +25,8 @@ class ModelSpec:
     model: str  # provider-side model id, e.g. "zhipu/glm-5.2"
     api_key_env: str | None = None
     timeout_s: float = 60.0
+    input_cost_per_million: float = 0.0
+    output_cost_per_million: float = 0.0
 
 
 class Provider:
@@ -74,7 +76,47 @@ class MockProvider(Provider):
         digest = hashlib.sha256(f"{spec.model}:{prompt}".encode()).hexdigest()
         # Fake but stable "latency" so report formatting/sorting has something to show.
         fake_latency = (int(digest[:4], 16) % 200) / 100.0
-        return f"mock-response-{digest[:8]}", fake_latency
+        return _mock_answer(spec.model, prompt, digest), fake_latency
+
+
+def _mock_answer(model: str, prompt: str, digest: str) -> str:
+    """Task-aware deterministic mock answers for the bundled fixture suite.
+
+    `mock-a` represents a stronger, more expensive model. `mock-b` answers a smaller
+    subset correctly, so reports show an actual quality/cost tradeoff without a network
+    call or API key.
+    """
+    text = prompt.lower()
+    strong = model.endswith("a")
+
+    if "grid interconnect is capped at 200 mw" in text:
+        return "3" if strong else "4"
+    if "percentage improvement" in text:
+        return "12%" if strong else "11%"
+    if "three resources most commonly cited" in text:
+        return "power, land, chips" if strong else "power, chips"
+    if "quarters memory footprint" in text:
+        return "35" if strong else "70"
+    if "sparse autoencoders" in text:
+        return (
+            "Sparse autoencoders separate superposition into interpretable features."
+            if strong
+            else "They compress activations."
+        )
+    if "latest paper on sparse autoencoders" in text:
+        return "1. search_arxiv(query)\n2. summarize(text)" if strong else "use search"
+    if "json key you would read" in text:
+        return "latency_s"
+    if "read_file(path)" in text and "write_file(path, content)" in text:
+        return (
+            "Call read_file(path), preserve the existing content, then write_file(path, content)."
+            if strong
+            else "Read it, then save it."
+        )
+    if "retry, abort, or escalate" in text:
+        return "retry"
+
+    return f"mock-response-{digest[:8]}"
 
 
 def get_provider(kind: str) -> Provider:
