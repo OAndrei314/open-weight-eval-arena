@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -79,6 +80,27 @@ class MockProvider(Provider):
         return _mock_answer(spec.model, prompt, digest), fake_latency
 
 
+_NEEDLE_RE = re.compile(r"facility access code to record in the log is exactly: ([A-Z0-9-]+)\.")
+
+
+def _long_context_recall_answer(prompt: str, strong: bool) -> str:
+    """Simulate needle-in-haystack recall, including the well-documented
+    "lost in the middle" effect: weaker models are reliable when the needle sits
+    near the start or end of the context but drop it when it's buried in the
+    middle third, even though the strong model still finds it either way.
+    """
+    match = _NEEDLE_RE.search(prompt)
+    if not match:
+        return "not found"
+    code = match.group(1)
+    if strong:
+        return code
+    needle_fraction = match.start() / len(prompt)
+    if needle_fraction < 0.2 or needle_fraction > 0.8:
+        return code
+    return "not found"
+
+
 def _mock_answer(model: str, prompt: str, digest: str) -> str:
     """Task-aware deterministic mock answers for the bundled fixture suite.
 
@@ -89,6 +111,8 @@ def _mock_answer(model: str, prompt: str, digest: str) -> str:
     text = prompt.lower()
     strong = model.endswith("a")
 
+    if "facility access code" in text:
+        return _long_context_recall_answer(prompt, strong)
     if "grid interconnect is capped at 200 mw" in text:
         return "3" if strong else "4"
     if "percentage improvement" in text:
