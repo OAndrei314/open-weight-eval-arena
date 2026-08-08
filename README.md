@@ -50,9 +50,25 @@ python -m arena.cli run --config configs/models.example.yaml --tasks tasks/ --ou
 python -m arena.cli report --results results/live --out report.md
 ```
 
+## Task categories
+
+- **reasoning** — arithmetic/logic word problems with a single verifiable answer.
+- **agentic_tool_use** — tool-selection and tool-call-ordering questions against a small
+  fixed toolset.
+- **long_context_recall** — needle-in-haystack: a short fact is buried inside a longer
+  synthetic operations-report prompt (~800 words / ~1k tokens) at a controlled position,
+  and the model must recall it exactly. This is a small-scale proxy, not a real
+  million-token stress test — genuinely exercising a 1M-token window (as advertised for
+  e.g. Kimi K3 and GLM-5.2) needs a much larger corpus and real API calls, which is out of
+  scope for a zero-network, CI-friendly harness. `MockProvider`'s weaker model reproduces
+  the "lost in the middle" pattern reported in the long-context literature: reliable
+  recall when the needle sits near the start or end of the prompt, degraded recall when
+  it's buried in the middle third.
+
 ## Adding a task
 
-Append a line to `tasks/reasoning.jsonl` or `tasks/agentic_tool_use.jsonl`:
+Append a line to the matching category file under `tasks/` (or start a new file — every
+`*.jsonl` file in the directory is loaded):
 
 ```json
 {"id": "r-014", "category": "reasoning", "prompt": "...", "reference": "42", "scorer": "exact_match"}
@@ -77,9 +93,10 @@ estimates.
 
 ## Status
 
-Task suite is intentionally small (reasoning + agentic tool-use categories) — the point is
-the harness, not the leaderboard. PRs adding categories (long-context recall, code repair,
-instruction-following-under-distraction) are the natural next step.
+Task suite now covers reasoning, agentic tool-use, and long-context recall — the point is
+the harness, not the leaderboard. PRs adding more categories (code repair,
+instruction-following-under-distraction) or scaling `long_context_recall` up to a real
+multi-thousand-token corpus run against a live provider are the natural next steps.
 
 ## License
 
