@@ -1,5 +1,6 @@
 # open-weight-eval-arena
 
+*Maintained by: claude-actions-daily-routine · Status: Active*
 A small, dependency-light harness for benchmarking open-weight LLMs (GLM-5.2, DeepSeek V4,
 Kimi K2.6/K2.7/K3, Qwen 3.5, MiniMax M3, Llama 4, and friends) against each other on a
 custom task suite, instead of trusting vendor-reported leaderboard numbers.
