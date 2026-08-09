@@ -1,4 +1,5 @@
 from arena.providers import ModelSpec, MockProvider
+from arena.scoring import score
 from arena.tasks import load_tasks
 
 MOCK_A = ModelSpec(name="mock-a", base_url="", model="mock-a")
@@ -46,3 +47,34 @@ def test_mock_provider_long_context_recall_weak_model_loses_middle_needles():
 
     late_edge_output, _ = provider.complete(MOCK_B, tasks["lc-005"].prompt)  # needle near end
     assert late_edge_output == tasks["lc-005"].reference
+
+
+def test_mock_provider_code_repair_strong_model_fixes_every_bug():
+    """The strong mock model should produce a fix that actually satisfies each task's
+    own scorer — not just a hardcoded string that happens to look right. This would
+    catch a typo'd reference regex or a mock answer that drifted out of sync with it.
+    """
+    provider = MockProvider()
+    tasks = [t for t in load_tasks("tasks") if t.category == "code_repair"]
+    assert len(tasks) == 5
+
+    for task in tasks:
+        output, _ = provider.complete(MOCK_A, task.prompt)
+        assert score(task.scorer, output, task.reference) == 1.0, (
+            f"{task.id}: strong model's fix {output!r} should satisfy the scorer"
+        )
+
+
+def test_mock_provider_code_repair_weak_model_leaves_bugs_unfixed():
+    """The weak mock model should reproduce a *plausible* failure mode (parroting the
+    original buggy line) rather than trivially always failing, so the category actually
+    discriminates between models instead of being all-pass/all-fail by construction.
+    """
+    provider = MockProvider()
+    tasks = [t for t in load_tasks("tasks") if t.category == "code_repair"]
+
+    for task in tasks:
+        output, _ = provider.complete(MOCK_B, task.prompt)
+        assert score(task.scorer, output, task.reference) == 0.0, (
+            f"{task.id}: weak model's output {output!r} should NOT satisfy the scorer"
+        )

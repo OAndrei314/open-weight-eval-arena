@@ -139,6 +139,20 @@ def _mock_answer(model: str, prompt: str, digest: str) -> str:
         )
     if "retry, abort, or escalate" in text:
         return "retry"
+    if "sum the first n elements" in text:
+        return "for i in range(n):" if strong else "for i in range(n - 1):"
+    if "rate limiter should block requests" in text:
+        return "return count >= limit" if strong else "return count > limit"
+    if "raises zerodivisionerror whenever cost_usd is 0" in text:
+        return (
+            "return score / cost_usd if cost_usd != 0 else None"
+            if strong
+            else "return score / cost_usd"
+        )
+    if "mutable default argument pitfall" in text:
+        return "def add_tag(tag, tags=None):" if strong else "def add_tag(tag, tags=[]):"
+    if "returns the original unnormalized" in text:
+        return "return result" if strong else "return scores"
 
     return f"mock-response-{digest[:8]}"
 

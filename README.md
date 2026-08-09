@@ -65,6 +65,11 @@ python -m arena.cli report --results results/live --out report.md
   the "lost in the middle" pattern reported in the long-context literature: reliable
   recall when the needle sits near the start or end of the prompt, degraded recall when
   it's buried in the middle third.
+- **code_repair** — a short buggy function plus a description of the symptom; the model
+  must output the single corrected line. Covers common real-world bug classes (off-by-one
+  loop bound, boundary-condition comparison operator, missing zero-division guard, mutable
+  default argument, wrong variable returned) rather than full-file patches, so it stays
+  scorable with a plain regex instead of needing code execution.
 
 ## Adding a task
 
@@ -94,10 +99,11 @@ estimates.
 
 ## Status
 
-Task suite now covers reasoning, agentic tool-use, and long-context recall — the point is
-the harness, not the leaderboard. PRs adding more categories (code repair,
-instruction-following-under-distraction) or scaling `long_context_recall` up to a real
-multi-thousand-token corpus run against a live provider are the natural next steps.
+Task suite now covers reasoning, agentic tool-use, long-context recall, and code repair —
+the point is the harness, not the leaderboard. PRs adding more categories
+(instruction-following-under-distraction is the next natural one) or scaling
+`long_context_recall` up to a real multi-thousand-token corpus run against a live provider
+are the natural next steps.
 
 ## License
 

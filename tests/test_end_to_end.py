@@ -25,5 +25,6 @@ def test_full_pipeline_with_mock_provider(tmp_path):
     assert "mock-a" in report
     assert "mock-b" in report
     assert "long_context_recall" in report
+    assert "code_repair" in report
     assert "cost_per_1k_tasks_usd" in report
     assert "score_per_usd" in report
