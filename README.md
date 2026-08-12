@@ -70,6 +70,14 @@ python -m arena.cli report --results results/live --out report.md
   loop bound, boundary-condition comparison operator, missing zero-division guard, mutable
   default argument, wrong variable returned) rather than full-file patches, so it stays
   scorable with a plain regex instead of needing code execution.
+- **instruction_following_under_distraction** — a fixed user instruction (answer in one
+  word, output a single integer, preserve list order, emit exact JSON) competes against a
+  second, "louder" instruction embedded in reference material the model is quoting from:
+  a reviewer note, a formatting-update banner, or a bare `IGNORE ALL PREVIOUS
+  INSTRUCTIONS` injection. This is a minimal, offline proxy for instruction-hierarchy
+  robustness — the same failure mode (an LLM treating untrusted context as more
+  authoritative than its actual instructions) that makes prompt injection dangerous in
+  agentic/tool-use settings, without needing a real tool-use harness to exercise it.
 
 ## Adding a task
 
@@ -99,11 +107,11 @@ estimates.
 
 ## Status
 
-Task suite now covers reasoning, agentic tool-use, long-context recall, and code repair —
-the point is the harness, not the leaderboard. PRs adding more categories
-(instruction-following-under-distraction is the next natural one) or scaling
-`long_context_recall` up to a real multi-thousand-token corpus run against a live provider
-are the natural next steps.
+Task suite now covers reasoning, agentic tool-use, long-context recall, code repair, and
+instruction-following-under-distraction — the point is the harness, not the leaderboard.
+Natural next steps: scaling `long_context_recall` up to a real multi-thousand-token corpus
+run against a live provider, or adding a multi-turn category (current tasks are all
+single-turn).
 
 ## License
 

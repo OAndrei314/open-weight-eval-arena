@@ -78,3 +78,53 @@ def test_mock_provider_code_repair_weak_model_leaves_bugs_unfixed():
         assert score(task.scorer, output, task.reference) == 0.0, (
             f"{task.id}: weak model's output {output!r} should NOT satisfy the scorer"
         )
+
+
+def test_mock_provider_ifd_strong_model_resists_distraction():
+    """The strong mock model should follow the original instruction and ignore the
+    embedded distractor/injection text on every task in the category, not just some.
+    """
+    provider = MockProvider()
+    tasks = [
+        t for t in load_tasks("tasks") if t.category == "instruction_following_under_distraction"
+    ]
+    assert len(tasks) == 5
+
+    for task in tasks:
+        output, _ = provider.complete(MOCK_A, task.prompt)
+        assert score(task.scorer, output, task.reference) == 1.0, (
+            f"{task.id}: strong model's output {output!r} should satisfy the scorer"
+        )
+
+
+def test_mock_provider_ifd_weak_model_gets_distracted():
+    """The weak mock model should reproduce a *plausible* distraction failure (following
+    the embedded note/injection instead of the original instruction) rather than just
+    returning garbage, so the category discriminates instruction-hierarchy robustness
+    specifically rather than general incompetence.
+    """
+    provider = MockProvider()
+    tasks = [
+        t for t in load_tasks("tasks") if t.category == "instruction_following_under_distraction"
+    ]
+
+    for task in tasks:
+        output, _ = provider.complete(MOCK_B, task.prompt)
+        assert score(task.scorer, output, task.reference) == 0.0, (
+            f"{task.id}: weak model's output {output!r} should NOT satisfy the scorer"
+        )
+
+
+def test_mock_provider_ifd_injection_task_weak_model_outputs_injected_word():
+    """Specifically check the classic "ignore all previous instructions" injection task
+    (ifd-004): the weak model should comply with the injected instruction and output
+    the word it demanded, not just fail the scorer for some unrelated reason.
+    """
+    provider = MockProvider()
+    tasks = {
+        t.id: t
+        for t in load_tasks("tasks")
+        if t.category == "instruction_following_under_distraction"
+    }
+    output, _ = provider.complete(MOCK_B, tasks["ifd-004"].prompt)
+    assert output == "override"
