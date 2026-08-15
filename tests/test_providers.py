@@ -115,6 +115,45 @@ def test_mock_provider_ifd_weak_model_gets_distracted():
         )
 
 
+def test_mock_provider_multi_turn_strong_model_tracks_full_history():
+    """The strong mock model should correctly answer every multi-turn task by using the
+    full transcript, not just the final turn."""
+    provider = MockProvider()
+    tasks = [t for t in load_tasks("tasks") if t.category == "multi_turn_consistency"]
+    assert len(tasks) == 4
+
+    for task in tasks:
+        output, _, transcript = provider.complete_conversation(MOCK_A, list(task.all_turns))
+        assert output == task.reference, f"{task.id}: strong model should track full history"
+        assert transcript[0] == {"role": "user", "content": task.all_turns[0]}
+        assert transcript[-2]["role"] == "user"
+        assert transcript[-1]["role"] == "assistant"
+
+
+def test_mock_provider_multi_turn_weak_model_loses_earlier_context():
+    """The weak mock model should reproduce plausible long-conversation failure modes
+    (forgetting an earlier instruction, anchoring on a stale fact) rather than trivially
+    always failing, so the category actually discriminates instead of being all-or-nothing."""
+    provider = MockProvider()
+    tasks = [t for t in load_tasks("tasks") if t.category == "multi_turn_consistency"]
+
+    for task in tasks:
+        output, _, _ = provider.complete_conversation(MOCK_B, list(task.all_turns))
+        assert score(task.scorer, output, task.reference) == 0.0, (
+            f"{task.id}: weak model's output {output!r} should NOT satisfy the scorer"
+        )
+
+
+def test_mock_provider_multi_turn_correction_task_weak_model_anchors_on_stale_fact():
+    """Specifically check mt-003: the weak model should answer with the first-mentioned
+    name (Priya) rather than the corrected one (Marcus), showing primacy-anchoring
+    rather than an unrelated failure."""
+    provider = MockProvider()
+    tasks = {t.id: t for t in load_tasks("tasks") if t.category == "multi_turn_consistency"}
+    output, _, _ = provider.complete_conversation(MOCK_B, list(tasks["mt-003"].all_turns))
+    assert output == "priya"
+
+
 def test_mock_provider_ifd_injection_task_weak_model_outputs_injected_word():
     """Specifically check the classic "ignore all previous instructions" injection task
     (ifd-004): the weak model should comply with the injected instruction and output

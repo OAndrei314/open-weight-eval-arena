@@ -13,19 +13,47 @@ class Task:
     prompt: str
     reference: str
     scorer: str
+    turns: tuple[str, ...] = ()  # prior conversation turns; empty for single-turn tasks
+
+    @property
+    def is_multi_turn(self) -> bool:
+        return len(self.turns) > 0
+
+    @property
+    def all_turns(self) -> tuple[str, ...]:
+        """Full conversation as a flat tuple of user messages, `prompt` last."""
+        return self.turns + (self.prompt,)
 
     @staticmethod
     def from_dict(d: dict) -> "Task":
-        required = {"id", "category", "prompt", "reference", "scorer"}
+        required = {"id", "category", "reference", "scorer"}
         missing = required - d.keys()
         if missing:
             raise ValueError(f"task {d.get('id', '<unknown>')} missing fields: {missing}")
+        task_id = d["id"]
+
+        if "turns" in d and "prompt" in d:
+            raise ValueError(f"task {task_id}: specify either 'prompt' or 'turns', not both")
+
+        if "turns" in d:
+            turns_field = d["turns"]
+            if not isinstance(turns_field, list) or len(turns_field) < 2:
+                raise ValueError(f"task {task_id}: 'turns' must be a list of at least 2 messages")
+            if not all(isinstance(t, str) and t.strip() for t in turns_field):
+                raise ValueError(f"task {task_id}: every entry in 'turns' must be a non-empty string")
+            prior, prompt = tuple(turns_field[:-1]), turns_field[-1]
+        elif "prompt" in d:
+            prior, prompt = (), d["prompt"]
+        else:
+            raise ValueError(f"task {task_id}: must specify 'prompt' (single-turn) or 'turns' (multi-turn)")
+
         return Task(
-            id=d["id"],
+            id=task_id,
             category=d["category"],
-            prompt=d["prompt"],
+            prompt=prompt,
             reference=d["reference"],
             scorer=d["scorer"],
+            turns=prior,
         )
 
 
