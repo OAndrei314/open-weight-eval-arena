@@ -8,6 +8,25 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(round(len(pieces) * 1.3)))
 
 
+def estimate_conversation_tokens(transcript: list[dict]) -> tuple[int, int]:
+    """Cumulative (input_tokens, output_tokens) for a multi-turn exchange, assuming a
+    stateless chat API that resends the full prior transcript on every round — the
+    standard behavior for OpenAI-compatible /v1/chat/completions endpoints. A naive
+    per-message sum would understate input cost, since the same early turns get
+    re-sent (and re-billed) on every later round.
+    """
+    input_tokens = 0
+    output_tokens = 0
+    history: list[dict] = []
+    for msg in transcript:
+        history.append(msg)
+        if msg["role"] == "user":
+            input_tokens += sum(estimate_tokens(m["content"]) for m in history)
+        else:
+            output_tokens += estimate_tokens(msg["content"])
+    return input_tokens, output_tokens
+
+
 def estimate_request_cost_usd(
     input_tokens: int,
     output_tokens: int,

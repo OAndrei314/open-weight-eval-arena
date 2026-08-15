@@ -35,16 +35,30 @@ class Provider:
         """Return (completion_text, latency_seconds)."""
         raise NotImplementedError
 
+    def complete_conversation(
+        self, spec: ModelSpec, turns: list[str]
+    ) -> tuple[str, float, list[dict]]:
+        """Run a multi-turn conversation, one user turn at a time, feeding each prior
+        assistant reply back in as history (the standard behavior for a stateless
+        chat-completions API, which resends the full transcript on every round).
+
+        Returns (final_response_text, total_latency_seconds, transcript), where
+        transcript is the full list of {"role", "content"} messages exchanged — callers
+        use it to compute cumulative token/cost accounting that reflects what a real
+        multi-round exchange actually sends over the wire, not just the final turn.
+        """
+        raise NotImplementedError
+
 
 class OpenAICompatProvider(Provider):
     """Talks to any /v1/chat/completions endpoint using only the standard library."""
 
-    def complete(self, spec: ModelSpec, prompt: str) -> tuple[str, float]:
+    def _post(self, spec: ModelSpec, messages: list[dict]) -> tuple[str, float]:
         api_key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
         payload = json.dumps(
             {
                 "model": spec.model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "temperature": 0,
             }
         ).encode("utf-8")
@@ -64,6 +78,23 @@ class OpenAICompatProvider(Provider):
         text = body["choices"][0]["message"]["content"]
         return text, latency
 
+    def complete(self, spec: ModelSpec, prompt: str) -> tuple[str, float]:
+        return self._post(spec, [{"role": "user", "content": prompt}])
+
+    def complete_conversation(
+        self, spec: ModelSpec, turns: list[str]
+    ) -> tuple[str, float, list[dict]]:
+        messages: list[dict] = []
+        total_latency = 0.0
+        final_text = ""
+        for turn in turns:
+            messages.append({"role": "user", "content": turn})
+            text, latency = self._post(spec, messages)
+            total_latency += latency
+            messages.append({"role": "assistant", "content": text})
+            final_text = text
+        return final_text, total_latency, messages
+
 
 class MockProvider(Provider):
     """Deterministic stand-in: hashes (model, prompt) into a stable pseudo-completion.
@@ -78,6 +109,28 @@ class MockProvider(Provider):
         # Fake but stable "latency" so report formatting/sorting has something to show.
         fake_latency = (int(digest[:4], 16) % 200) / 100.0
         return _mock_answer(spec.model, prompt, digest), fake_latency
+
+    def complete_conversation(
+        self, spec: ModelSpec, turns: list[str]
+    ) -> tuple[str, float, list[dict]]:
+        strong = spec.model.endswith("a")
+        messages: list[dict] = []
+        total_latency = 0.0
+        final_text = ""
+        for i, turn in enumerate(turns):
+            messages.append({"role": "user", "content": turn})
+            digest = hashlib.sha256(f"{spec.model}:{'|'.join(turns[: i + 1])}".encode()).hexdigest()
+            fake_latency = (int(digest[:4], 16) % 200) / 100.0
+            if i == len(turns) - 1:
+                text = _mock_multi_turn_answer(turns, strong) or f"mock-response-{digest[:8]}"
+            else:
+                # Earlier turns just need a plausible acknowledgment; only the final
+                # turn is scored, but a real conversation still gets a reply each round.
+                text = f"ack-{i + 1}"
+            total_latency += fake_latency
+            messages.append({"role": "assistant", "content": text})
+            final_text = text
+        return final_text, total_latency, messages
 
 
 _NEEDLE_RE = re.compile(r"facility access code to record in the log is exactly: ([A-Z0-9-]+)\.")
@@ -129,6 +182,35 @@ def _instruction_following_answer(text: str, strong: bool) -> str | None:
         if strong:
             return '{"above_threshold": true}'
         return "| above_threshold |\n| --- |\n| true |"
+    return None
+
+
+def _mock_multi_turn_answer(turns: list[str], strong: bool) -> str | None:
+    """Task-aware mock answers for tasks that require carrying state across turns.
+
+    The strong mock reads the full transcript; the weak mock only effectively tracks
+    the latest turn, reproducing three real long-conversation failure modes: forgetting
+    an early naming/formatting instruction, anchoring on the first-mentioned fact
+    instead of a later correction, and losing a numeric constraint stated earlier.
+    """
+    full_text = " ".join(turns).lower()
+    latest = turns[-1].lower()
+
+    if "call the primary cooling loop" in full_text and "tripped its high-pressure" in latest:
+        return "loop a" if strong else "insufficient information to determine which loop is available"
+    if "circuit budget for this row" in full_text and "how many racks" in latest:
+        return "8" if strong else "10"
+    if "on-call engineer for this incident is" in full_text and "who is the on-call engineer" in latest:
+        return "marcus" if strong else "priya"
+    if (
+        "answer every question in this conversation with exactly one word" in full_text
+        and "is row 12 now on redundant power" in latest
+    ):
+        return (
+            "yes"
+            if strong
+            else "yes, row 12 is back on redundant power following the completion of scheduled maintenance."
+        )
     return None
 
 

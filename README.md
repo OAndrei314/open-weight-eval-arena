@@ -78,6 +78,14 @@ python -m arena.cli report --results results/live --out report.md
   robustness — the same failure mode (an LLM treating untrusted context as more
   authoritative than its actual instructions) that makes prompt injection dangerous in
   agentic/tool-use settings, without needing a real tool-use harness to exercise it.
+- **multi_turn_consistency** — a short conversation (2-3 turns) where an early turn
+  establishes a fact, naming convention, or formatting rule, and the final turn asks a
+  question that's only answerable by correctly carrying that state forward — including
+  one task where a later turn *corrects* the earlier one, testing whether the model
+  updates instead of anchoring on the first-mentioned fact. Every prior turn is actually
+  replayed through the provider (each round resends the growing transcript, exactly like
+  a real stateless chat-completions API), so latency, and token/cost accounting all
+  reflect the full multi-round exchange rather than just the last message.
 
 ## Adding a task
 
@@ -86,6 +94,14 @@ Append a line to the matching category file under `tasks/` (or start a new file 
 
 ```json
 {"id": "r-014", "category": "reasoning", "prompt": "...", "reference": "42", "scorer": "exact_match"}
+```
+
+Multi-turn tasks use `"turns"` (a list of at least 2 user messages, in order) instead of
+`"prompt"` — the harness treats the last entry as the scored turn and everything before
+it as prior conversation:
+
+```json
+{"id": "mt-005", "category": "multi_turn_consistency", "turns": ["...", "..."], "reference": "...", "scorer": "exact_match"}
 ```
 
 ## Adding a model
@@ -107,11 +123,11 @@ estimates.
 
 ## Status
 
-Task suite now covers reasoning, agentic tool-use, long-context recall, code repair, and
-instruction-following-under-distraction — the point is the harness, not the leaderboard.
-Natural next steps: scaling `long_context_recall` up to a real multi-thousand-token corpus
-run against a live provider, or adding a multi-turn category (current tasks are all
-single-turn).
+Task suite now covers reasoning, agentic tool-use, long-context recall, code repair,
+instruction-following-under-distraction, and multi-turn consistency — the point is the
+harness, not the leaderboard. Natural next step: scaling `long_context_recall` up to a
+real multi-thousand-token corpus run against a live provider (the current fixtures are a
+small-scale proxy, not a real million-token stress test, as noted above).
 
 ## License
 
