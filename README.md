@@ -1,7 +1,7 @@
 # open-weight-eval-arena
 
 *Maintained by: claude-actions-daily-routine · Status: Active*
-A small, dependency-light harness for benchmarking open-weight LLMs (GLM-5.2, DeepSeek V4,
+A small, dependency-light harness for benchmarking open-weight LLMs (GLM-5.2/5.3, DeepSeek V4,
 Kimi K2.6/K2.7/K3, Qwen 3.5, MiniMax M3, Llama 4, and friends) against each other on a
 custom task suite, instead of trusting vendor-reported leaderboard numbers.
 
@@ -11,7 +11,7 @@ whatever you actually care about — and produce a reproducible, versioned repor
 
 ## Why this exists
 
-The open-weight frontier moved fast in the first half of 2026 (GLM-5.2, DeepSeek V4, Kimi K2.6
+The open-weight frontier moved fast through 2026 (GLM-5.2 → 5.3, DeepSeek V4, Kimi K2.6
 → K2.7 → K3, MiniMax M3, Qwen 3.5), and picking a model for a given workload increasingly means
 running your own evals rather than reading a benchmark table. This is a minimal, auditable
 version of that process: plain JSONL task files, pluggable scorers, pluggable model providers,
@@ -47,8 +47,8 @@ python -m arena.cli run --config configs/mock.yaml --tasks tasks/ --out results/
 # export the relevant API key env vars, then:
 python -m arena.cli run --config configs/models.example.yaml --tasks tasks/ --out results/live
 
-# Generate the comparison report
-python -m arena.cli report --results results/live --out report.md
+# Generate the comparison report, plus a PNG bar chart of overall score per model
+python -m arena.cli report --results results/live --out report.md --chart report.png
 ```
 
 ## Task categories
@@ -109,9 +109,9 @@ it as prior conversation:
 Add an entry to your config YAML:
 
 ```yaml
-- name: glm-5.2
+- name: glm-5.3
   base_url: https://openrouter.ai/api/v1
-  model: zhipu/glm-5.2
+  model: zhipu/glm-5.3
   api_key_env: OPENROUTER_API_KEY
   input_cost_per_million: 0.0
   output_cost_per_million: 0.0
@@ -125,9 +125,17 @@ estimates.
 
 Task suite now covers reasoning, agentic tool-use, long-context recall, code repair,
 instruction-following-under-distraction, and multi-turn consistency — the point is the
-harness, not the leaderboard. Natural next step: scaling `long_context_recall` up to a
-real multi-thousand-token corpus run against a live provider (the current fixtures are a
-small-scale proxy, not a real million-token stress test, as noted above).
+harness, not the leaderboard. `arena report --chart` now also renders the `report.py →
+report.md + chart.png` pipeline from the quickstart diagram (previously only the markdown
+half was implemented — the diagram promised a chart that didn't exist yet); it's a plain
+matplotlib horizontal bar chart of overall score per model, kept as an opt-in flag so the
+core JSONL → markdown path has no plotting dependency to import unless you ask for one.
+
+Natural next step: scaling `long_context_recall` up to a real multi-thousand-token corpus
+run against a live provider (the current fixtures are a small-scale proxy, not a real
+million-token stress test, as noted above) — genuinely out of scope for this repo's
+zero-network, CI-only test suite, so it'd need to happen as a manual, credentialed run
+rather than something committed here.
 
 ## License
 

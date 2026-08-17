@@ -2,10 +2,10 @@
 # you have API keys for. Any host exposing an OpenAI-compatible /v1/chat/completions
 # endpoint works here (OpenRouter, Fireworks, Together, Groq, local vLLM/Ollama, etc).
 models:
-  - name: glm-5.2
+  - name: glm-5.3
     provider: openai_compat
     base_url: https://openrouter.ai/api/v1
-    model: zhipu/glm-5.2
+    model: zhipu/glm-5.3
     api_key_env: OPENROUTER_API_KEY
     # Fill with current provider pricing in USD per million tokens.
     input_cost_per_million: 0.0

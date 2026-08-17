@@ -12,7 +12,12 @@ def _fmt_optional(value: float | None, digits: int = 3) -> str:
     return f"{value:.{digits}f}"
 
 
-def _load_results(results_dir: str | Path) -> dict[str, list[dict]]:
+def load_results(results_dir: str | Path) -> dict[str, list[dict]]:
+    """Load every `*.jsonl` result file in a directory, keyed by model name.
+
+    Shared by `build_report` and `arena.chart.build_chart` so both read the exact
+    same on-disk format from a single place.
+    """
     results_dir = Path(results_dir)
     by_model: dict[str, list[dict]] = {}
     for path in sorted(results_dir.glob("*.jsonl")):
@@ -28,7 +33,7 @@ def _load_results(results_dir: str | Path) -> dict[str, list[dict]]:
 
 
 def build_report(results_dir: str | Path) -> str:
-    by_model = _load_results(results_dir)
+    by_model = load_results(results_dir)
     if not by_model:
         return "# Arena Report\n\nNo results found.\n"
 
