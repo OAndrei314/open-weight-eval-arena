@@ -21,6 +21,11 @@ def main(argv: list[str] | None = None) -> int:
     report_p = sub.add_parser("report", help="build a markdown report from results")
     report_p.add_argument("--results", required=True, help="results directory (from `run --out`)")
     report_p.add_argument("--out", required=True, help="output markdown file path")
+    report_p.add_argument(
+        "--chart",
+        help="optional output path for a PNG bar chart of overall score per model "
+        "(requires matplotlib)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -38,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(report)
         print(report)
+        if args.chart:
+            from .chart import build_chart
+
+            build_chart(args.results, args.chart)
+            print(f"wrote chart -> {args.chart}")
         return 0
 
     return 1
