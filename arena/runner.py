@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from .cost import estimate_conversation_tokens, estimate_request_cost_usd, estimate_tokens
-from .providers import ModelSpec, get_provider
+from .providers import ModelSpec, ProviderError, get_provider
 from .scoring import score
 from .tasks import Task, load_tasks
 
@@ -41,18 +41,30 @@ def run_suite(
     for kind, spec in model_specs:
         provider = get_provider(kind)
         out_path = out_dir / f"{spec.name}.jsonl"
+        errors = 0
         with out_path.open("w", encoding="utf-8") as f:
             for task in tasks:
-                if task.is_multi_turn:
-                    output, latency, transcript = provider.complete_conversation(
-                        spec, list(task.all_turns)
-                    )
-                    input_tokens, output_tokens = estimate_conversation_tokens(transcript)
-                else:
-                    output, latency = provider.complete(spec, task.prompt)
-                    input_tokens = estimate_tokens(task.prompt)
-                    output_tokens = estimate_tokens(output)
-                s = score(task.scorer, output, task.reference)
+                error: str | None = None
+                try:
+                    if task.is_multi_turn:
+                        output, latency, transcript = provider.complete_conversation(
+                            spec, list(task.all_turns)
+                        )
+                        input_tokens, output_tokens = estimate_conversation_tokens(transcript)
+                    else:
+                        output, latency = provider.complete(spec, task.prompt)
+                        input_tokens = estimate_tokens(task.prompt)
+                        output_tokens = estimate_tokens(output)
+                    s = score(task.scorer, output, task.reference)
+                except ProviderError as e:
+                    # A provider failure (rate limit exhausted, malformed response,
+                    # auth error, ...) is an infrastructure failure, not the model
+                    # answering wrong -- record it distinctly (score 0, error set)
+                    # instead of letting it crash the whole suite run.
+                    output, latency, input_tokens, output_tokens, s = "", 0.0, 0, 0, 0.0
+                    error = str(e)
+                    errors += 1
+                    print(f"[{spec.name}] task {task.id} failed: {error}")
                 estimated_cost_usd = estimate_request_cost_usd(
                     input_tokens,
                     output_tokens,
@@ -71,6 +83,8 @@ def run_suite(
                     "estimated_cost_usd": round(estimated_cost_usd, 8),
                     "input_cost_per_million": spec.input_cost_per_million,
                     "output_cost_per_million": spec.output_cost_per_million,
+                    "error": error,
                 }
                 f.write(json.dumps(record) + "\n")
-        print(f"[{spec.name}] wrote {len(tasks)} results -> {out_path}")
+        suffix = f" ({errors} provider error(s))" if errors else ""
+        print(f"[{spec.name}] wrote {len(tasks)} results -> {out_path}{suffix}")

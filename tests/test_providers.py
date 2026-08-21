@@ -1,9 +1,35 @@
-from arena.providers import ModelSpec, MockProvider
+import json
+import urllib.error
+
+import pytest
+
+from arena.providers import ModelSpec, MockProvider, OpenAICompatProvider, ProviderError
 from arena.scoring import score
 from arena.tasks import load_tasks
 
 MOCK_A = ModelSpec(name="mock-a", base_url="", model="mock-a")
 MOCK_B = ModelSpec(name="mock-b", base_url="", model="mock-b")
+REAL_SPEC = ModelSpec(name="real-model", base_url="https://example.invalid/v1", model="real-model")
+
+
+class _FakeResponse:
+    """Stands in for the `http.client.HTTPResponse` context manager `urlopen` returns."""
+
+    def __init__(self, body: dict):
+        self._raw = json.dumps(body).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def read(self) -> bytes:
+        return self._raw
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError("https://example.invalid/v1/chat/completions", code, "err", {}, None)
 
 
 def test_mock_provider_simulates_stronger_and_weaker_models():
@@ -167,3 +193,100 @@ def test_mock_provider_ifd_injection_task_weak_model_outputs_injected_word():
     }
     output, _ = provider.complete(MOCK_B, tasks["ifd-004"].prompt)
     assert output == "override"
+
+
+def test_openai_compat_provider_parses_successful_response(monkeypatch):
+    monkeypatch.setattr(
+        "arena.providers.urllib.request.urlopen",
+        lambda req, timeout: _FakeResponse({"choices": [{"message": {"content": "hello"}}]}),
+    )
+    provider = OpenAICompatProvider()
+    text, latency = provider.complete(REAL_SPEC, "hi")
+    assert text == "hello"
+    assert latency >= 0.0
+
+
+def test_openai_compat_provider_retries_transient_http_error_then_succeeds(monkeypatch):
+    queue = [_http_error(503), _FakeResponse({"choices": [{"message": {"content": "ok"}}]})]
+
+    def fake_urlopen(req, timeout):
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr("arena.providers.urllib.request.urlopen", fake_urlopen)
+    sleeps = []
+    provider = OpenAICompatProvider(max_retries=3, backoff_base_s=0.01, sleep_fn=sleeps.append)
+
+    text, _ = provider.complete(REAL_SPEC, "hi")
+
+    assert text == "ok"
+    assert sleeps == [0.01]  # exactly one backoff, for the single retried attempt
+
+
+def test_openai_compat_provider_retries_connection_error_then_succeeds(monkeypatch):
+    queue = [urllib.error.URLError("connection refused"), _FakeResponse({"choices": [{"message": {"content": "ok"}}]})]
+
+    def fake_urlopen(req, timeout):
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr("arena.providers.urllib.request.urlopen", fake_urlopen)
+    provider = OpenAICompatProvider(backoff_base_s=0.0, sleep_fn=lambda s: None)
+
+    text, _ = provider.complete(REAL_SPEC, "hi")
+
+    assert text == "ok"
+
+
+def test_openai_compat_provider_raises_provider_error_after_exhausting_retries(monkeypatch):
+    monkeypatch.setattr(
+        "arena.providers.urllib.request.urlopen", lambda req, timeout: (_ for _ in ()).throw(_http_error(500))
+    )
+    sleeps = []
+    provider = OpenAICompatProvider(max_retries=2, backoff_base_s=0.0, sleep_fn=sleeps.append)
+
+    with pytest.raises(ProviderError, match="after 3 attempts"):
+        provider.complete(REAL_SPEC, "hi")
+
+    assert sleeps == [0.0, 0.0]  # backoff attempted before each retry, not after the final failure
+
+
+def test_openai_compat_provider_fails_fast_on_non_retryable_http_error(monkeypatch):
+    monkeypatch.setattr(
+        "arena.providers.urllib.request.urlopen", lambda req, timeout: (_ for _ in ()).throw(_http_error(401))
+    )
+    sleeps = []
+    provider = OpenAICompatProvider(max_retries=3, sleep_fn=sleeps.append)
+
+    with pytest.raises(ProviderError, match="401"):
+        provider.complete(REAL_SPEC, "hi")
+
+    assert sleeps == []  # no retries wasted on a request that will never succeed
+
+
+def test_openai_compat_provider_raises_provider_error_on_malformed_response(monkeypatch):
+    monkeypatch.setattr(
+        "arena.providers.urllib.request.urlopen",
+        lambda req, timeout: _FakeResponse({"unexpected": "shape"}),
+    )
+    sleeps = []
+    provider = OpenAICompatProvider(sleep_fn=sleeps.append)
+
+    with pytest.raises(ProviderError, match="malformed response"):
+        provider.complete(REAL_SPEC, "hi")
+
+    assert sleeps == []  # a malformed response body won't fix itself on retry
+
+
+def test_openai_compat_provider_complete_conversation_propagates_provider_error(monkeypatch):
+    monkeypatch.setattr(
+        "arena.providers.urllib.request.urlopen", lambda req, timeout: (_ for _ in ()).throw(_http_error(401))
+    )
+    provider = OpenAICompatProvider()
+
+    with pytest.raises(ProviderError):
+        provider.complete_conversation(REAL_SPEC, ["turn one", "turn two"])
