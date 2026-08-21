@@ -47,6 +47,7 @@ def build_report(results_dir: str | Path) -> str:
         "avg_latency_s",
         "cost_per_1k_tasks_usd",
         "score_per_usd",
+        "errors",
     ]
     lines.append("| " + " | ".join(header) + " |")
     lines.append("| " + " | ".join(["---"] * len(header)) + " |")
@@ -63,6 +64,7 @@ def build_report(results_dir: str | Path) -> str:
         cat_scores = [
             f"{(sum(by_cat[c]) / len(by_cat[c])):.2f}" if by_cat[c] else "-" for c in categories
         ]
+        error_count = sum(1 for r in recs if r.get("error"))
         row = [
             model,
             f"{overall:.2f}",
@@ -70,6 +72,7 @@ def build_report(results_dir: str | Path) -> str:
             f"{avg_latency:.3f}",
             _fmt_optional(cost_per_1k, 4),
             _fmt_optional(score_per_usd, 1),
+            str(error_count) if error_count else "-",
         ]
         lines.append("| " + " | ".join(row) + " |")
 
@@ -78,6 +81,16 @@ def build_report(results_dir: str | Path) -> str:
         "Cost columns use configured $/million-token rates and deterministic token estimates "
         "when provider usage data is unavailable."
     )
+    total_errors = sum(1 for recs in by_model.values() for r in recs if r.get("error"))
+    if total_errors:
+        lines.append("")
+        lines.append(
+            f"**{total_errors} task run(s) failed at the provider level** (rate limits, "
+            "timeouts, malformed responses) after exhausting retries and are scored 0 in "
+            "`overall` — the `errors` column isolates these from genuine wrong answers so "
+            "a low score isn't misread as a model quality result when it was actually an "
+            "infra failure."
+        )
     lines.append("")
     lines.append(f"_{sum(len(r) for r in by_model.values())} task runs across "
                   f"{len(by_model)} model(s), {len(categories)} categories._")

@@ -131,6 +131,18 @@ half was implemented — the diagram promised a chart that didn't exist yet); it
 matplotlib horizontal bar chart of overall score per model, kept as an opt-in flag so the
 core JSONL → markdown path has no plotting dependency to import unless you ask for one.
 
+`OpenAICompatProvider` — the code path that actually talks to a real model host — had zero
+test coverage and zero error handling: any rate limit, transient 5xx, timeout, or malformed
+response body would raise an uncaught exception and kill the entire suite run, discarding
+whatever results had already been collected for every other model. It now retries transient
+failures (429/500/502/503/504, connection errors, timeouts) with exponential backoff,
+fails fast on non-retryable errors (auth, bad request, malformed response body) instead of
+wasting retries on something that can't succeed, and — if retries are exhausted — `run_suite`
+records that single task as a failed result (`score: 0`, `error: "..."` set) and keeps going
+instead of crashing the whole run. `report.py` now surfaces an `errors` column and a summary
+note so a provider outage isn't silently averaged into a model's score and misread as the
+model itself answering badly.
+
 Natural next step: scaling `long_context_recall` up to a real multi-thousand-token corpus
 run against a live provider (the current fixtures are a small-scale proxy, not a real
 million-token stress test, as noted above) — genuinely out of scope for this repo's

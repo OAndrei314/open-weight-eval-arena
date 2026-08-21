@@ -15,8 +15,22 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
+
+
+class ProviderError(RuntimeError):
+    """A request to a model provider failed, either immediately (non-retryable, e.g.
+    bad auth, malformed response) or after exhausting retries (transient, e.g. rate
+    limit, timeout). Callers can catch this to record a failed task result instead of
+    letting one bad request take down an entire suite run."""
+
+
+# HTTP statuses worth retrying: rate limiting and transient server-side failures.
+# Anything else (400 bad request, 401/403 auth, 404 unknown model) is a configuration
+# problem that a retry won't fix, so it's raised immediately instead.
+_RETRYABLE_HTTP_STATUS = {429, 500, 502, 503, 504}
 
 
 @dataclass(frozen=True)
@@ -51,7 +65,17 @@ class Provider:
 
 
 class OpenAICompatProvider(Provider):
-    """Talks to any /v1/chat/completions endpoint using only the standard library."""
+    """Talks to any /v1/chat/completions endpoint using only the standard library.
+
+    Retries transient failures (rate limits, transient 5xxs, connection/timeout
+    errors) with exponential backoff before giving up. Non-retryable failures (bad
+    auth, malformed responses) raise `ProviderError` immediately.
+    """
+
+    def __init__(self, max_retries: int = 3, backoff_base_s: float = 0.5, sleep_fn=time.sleep):
+        self.max_retries = max_retries
+        self.backoff_base_s = backoff_base_s
+        self._sleep = sleep_fn
 
     def _post(self, spec: ModelSpec, messages: list[dict]) -> tuple[str, float]:
         api_key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
@@ -71,12 +95,38 @@ class OpenAICompatProvider(Provider):
                 **({"Authorization": f"Bearer {api_key}"} if api_key else {}),
             },
         )
-        start = time.monotonic()
-        with urllib.request.urlopen(req, timeout=spec.timeout_s) as resp:
-            body = json.loads(resp.read())
-        latency = time.monotonic() - start
-        text = body["choices"][0]["message"]["content"]
-        return text, latency
+
+        last_err: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            start = time.monotonic()
+            try:
+                with urllib.request.urlopen(req, timeout=spec.timeout_s) as resp:
+                    raw = resp.read()
+                latency = time.monotonic() - start
+            except urllib.error.HTTPError as e:
+                if e.code not in _RETRYABLE_HTTP_STATUS:
+                    raise ProviderError(
+                        f"{spec.name}: non-retryable HTTP {e.code} from provider ({e.reason})"
+                    ) from e
+                last_err = e
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last_err = e
+            else:
+                try:
+                    body = json.loads(raw)
+                    text = body["choices"][0]["message"]["content"]
+                except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
+                    raise ProviderError(
+                        f"{spec.name}: malformed response (expected choices[0].message.content): {e}"
+                    ) from e
+                return text, latency
+
+            if attempt < self.max_retries:
+                self._sleep(self.backoff_base_s * (2**attempt))
+
+        raise ProviderError(
+            f"{spec.name}: request failed after {self.max_retries + 1} attempts: {last_err}"
+        ) from last_err
 
     def complete(self, spec: ModelSpec, prompt: str) -> tuple[str, float]:
         return self._post(spec, [{"role": "user", "content": prompt}])
