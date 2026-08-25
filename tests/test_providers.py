@@ -106,6 +106,46 @@ def test_mock_provider_code_repair_weak_model_leaves_bugs_unfixed():
         )
 
 
+def test_mock_provider_agentic_tool_use_strong_model_answers_correctly():
+    """Every agentic_tool_use task should be solvable by the strong mock model.
+
+    Regression test for a substring-matching bug: the generic "sparse
+    autoencoders" branch (meant for the r-005 reasoning task) used to shadow
+    the more specific "latest paper on sparse autoencoders" branch (meant for
+    a-001), because a-001's prompt also contains "sparse autoencoders" as a
+    substring and the generic check ran first. That made the strong mock model
+    score 0.0 on a-001 even though it should trivially pass.
+    """
+    provider = MockProvider()
+    tasks = [t for t in load_tasks("tasks") if t.category == "agentic_tool_use"]
+    assert len(tasks) == 4
+
+    for task in tasks:
+        output, _ = provider.complete(MOCK_A, task.prompt)
+        assert score(task.scorer, output, task.reference) == 1.0, (
+            f"{task.id}: strong model's output {output!r} should satisfy the scorer"
+        )
+
+
+def test_mock_provider_agentic_tool_use_weak_model_discriminates():
+    """The weak mock model should fail every task where a wrong-but-plausible
+    answer exists (a-001 tool ordering, a-003 safe read/write, a-004 timeout
+    handling). a-002 has a single unambiguous correct answer (there's only one
+    sensible JSON key to read) so both tiers legitimately agree there.
+    """
+    provider = MockProvider()
+    tasks = {t.id: t for t in load_tasks("tasks") if t.category == "agentic_tool_use"}
+
+    for tid in ("a-001", "a-003", "a-004"):
+        output, _ = provider.complete(MOCK_B, tasks[tid].prompt)
+        assert score(tasks[tid].scorer, output, tasks[tid].reference) == 0.0, (
+            f"{tid}: weak model's output {output!r} should NOT satisfy the scorer"
+        )
+
+    output, _ = provider.complete(MOCK_B, tasks["a-002"].prompt)
+    assert score(tasks["a-002"].scorer, output, tasks["a-002"].reference) == 1.0
+
+
 def test_mock_provider_ifd_strong_model_resists_distraction():
     """The strong mock model should follow the original instruction and ignore the
     embedded distractor/injection text on every task in the category, not just some.

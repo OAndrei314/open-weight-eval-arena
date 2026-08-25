@@ -287,14 +287,14 @@ def _mock_answer(model: str, prompt: str, digest: str) -> str:
         return "power, land, chips" if strong else "power, chips"
     if "quarters memory footprint" in text:
         return "35" if strong else "70"
+    if "latest paper on sparse autoencoders" in text:
+        return "1. search_arxiv(query)\n2. summarize(text)" if strong else "use search"
     if "sparse autoencoders" in text:
         return (
             "Sparse autoencoders separate superposition into interpretable features."
             if strong
             else "They compress activations."
         )
-    if "latest paper on sparse autoencoders" in text:
-        return "1. search_arxiv(query)\n2. summarize(text)" if strong else "use search"
     if "json key you would read" in text:
         return "latency_s"
     if "read_file(path)" in text and "write_file(path, content)" in text:
@@ -304,7 +304,10 @@ def _mock_answer(model: str, prompt: str, digest: str) -> str:
             else "Read it, then save it."
         )
     if "retry, abort, or escalate" in text:
-        return "retry"
+        # A single transient timeout should be retried, not abandoned -- a weaker
+        # heuristic gives up immediately instead. (The retry logic this repo's own
+        # OpenAICompatProvider uses is the "strong" behavior here.)
+        return "retry" if strong else "abort"
     if "sum the first n elements" in text:
         return "for i in range(n):" if strong else "for i in range(n - 1):"
     if "rate limiter should block requests" in text:
