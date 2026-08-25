@@ -143,6 +143,22 @@ instead of crashing the whole run. `report.py` now surfaces an `errors` column a
 note so a provider outage isn't silently averaged into a model's score and misread as the
 model itself answering badly.
 
+`agentic_tool_use` had a scoring bug: `MockProvider`'s task-matching in `_mock_answer` is a
+sequence of `if "substring" in text` checks, and the generic branch for the r-005 reasoning
+task (`"sparse autoencoders"`) sat *before* the more specific branch for the a-001 tool-use
+task (`"latest paper on sparse autoencoders"`) — whose prompt also contains "sparse
+autoencoders" as a substring. So a-001 always fell into r-005's branch and got scored against
+the wrong reference, making the *strong* mock model score 0.0 on a task it should trivially
+pass. No test exercised `agentic_tool_use` at all, unlike every other category. Fixed the
+branch order and added the missing strong/weak tests. While in there, a-004 ("what's the best
+first response to a tool timeout: retry, abort, or escalate?") turned out to accept any of the
+three words as correct via its `regex_rubric` reference — so a model could answer "escalate"
+and still get full credit despite not answering what the prompt actually asked for. Switched
+it to `exact_match` against "retry" (the answer consistent with this repo's own
+`OpenAICompatProvider` retry logic for a single transient timeout), and gave the weak mock a
+plausible-but-wrong answer ("abort") so the task actually discriminates instead of being
+vacuously true for every response shape.
+
 Natural next step: scaling `long_context_recall` up to a real multi-thousand-token corpus
 run against a live provider (the current fixtures are a small-scale proxy, not a real
 million-token stress test, as noted above) — genuinely out of scope for this repo's
