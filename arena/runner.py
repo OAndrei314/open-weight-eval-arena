@@ -29,6 +29,15 @@ def load_model_specs(config_path: str | Path) -> list[tuple[str, ModelSpec]]:
             output_cost_per_million=float(entry.get("output_cost_per_million", 0.0)),
         )
         specs.append((kind, spec))
+
+    names = [spec.name for _, spec in specs]
+    dupes = {n for n in names if names.count(n) > 1}
+    if dupes:
+        # Two models sharing a display name would silently overwrite each other's
+        # `{name}.jsonl` result file in run_suite -- one model's entire evaluation
+        # would vanish from the report with no error, exactly the failure mode
+        # `arena.tasks.load_tasks` already guards against for duplicate task ids.
+        raise ValueError(f"duplicate model names in {config_path}: {sorted(dupes)}")
     return specs
 
 

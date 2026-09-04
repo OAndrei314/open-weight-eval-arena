@@ -3,9 +3,12 @@ down the whole suite run — the failure mode `arena.providers.OpenAICompatProvi
 raises `ProviderError` for after exhausting retries."""
 import json
 
+import pytest
+import yaml
+
 from arena.providers import ModelSpec, ProviderError
 from arena.report import build_report
-from arena.runner import run_suite
+from arena.runner import load_model_specs, run_suite
 from arena.tasks import load_tasks
 
 
@@ -69,6 +72,49 @@ def test_report_isolates_provider_errors_from_genuine_scores(tmp_path):
     assert "errors" in report  # column header
     assert "| flaky | 0.50 |" in report  # one genuine 1.0 and one errored 0.0 averages to 0.50
     assert "task run(s) failed at the provider level" in report
+
+
+def test_load_model_specs_rejects_duplicate_model_names(tmp_path):
+    """Two config entries sharing a display name would silently overwrite each
+    other's `{name}.jsonl` result file in `run_suite` -- one model's entire
+    evaluation would vanish from the report with no error. This should be
+    rejected up front, the same way `load_tasks` rejects duplicate task ids."""
+    config_path = tmp_path / "dupe.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": [
+                    {"name": "glm-5.3", "provider": "mock", "model": "glm-5.3-a"},
+                    {"name": "glm-5.3", "provider": "mock", "model": "glm-5.3-b"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate model names"):
+        load_model_specs(config_path)
+
+
+def test_load_model_specs_allows_distinct_names_with_shared_provider_model_id(tmp_path):
+    """Two distinct display names are fine even if they happen to point at the same
+    underlying provider-side model id (e.g. comparing temperature/prompt variants)."""
+    config_path = tmp_path / "ok.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": [
+                    {"name": "glm-5.3-run-a", "provider": "mock", "model": "glm-5.3"},
+                    {"name": "glm-5.3-run-b", "provider": "mock", "model": "glm-5.3"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    specs = load_model_specs(config_path)
+
+    assert [spec.name for _, spec in specs] == ["glm-5.3-run-a", "glm-5.3-run-b"]
 
 
 def test_report_shows_no_error_note_when_results_have_no_errors(tmp_path):

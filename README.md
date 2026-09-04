@@ -119,7 +119,9 @@ Add an entry to your config YAML:
 
 Fill the pricing fields with the current rates from your provider invoice or pricing page.
 The harness treats them as user-supplied assumptions and labels resulting costs as
-estimates.
+estimates. Each model needs a unique `name` — `load_model_specs` rejects a config with
+two entries sharing one, since `run_suite` writes results to `{name}.jsonl` and a
+collision would silently discard one model's entire evaluation.
 
 ## Status
 
@@ -158,6 +160,15 @@ it to `exact_match` against "retry" (the answer consistent with this repo's own
 `OpenAICompatProvider` retry logic for a single transient timeout), and gave the weak mock a
 plausible-but-wrong answer ("abort") so the task actually discriminates instead of being
 vacuously true for every response shape.
+
+`load_model_specs` had no check for duplicate model `name` values in a config, unlike
+`load_tasks`, which already rejects duplicate task ids. `run_suite` writes each model's
+results to `results/{name}.jsonl` and `report.py` keys its per-model table by that same
+name, so two config entries sharing a `name` (a copy-paste typo when adding a new model,
+say) would silently overwrite each other's result file — one model's entire evaluation
+would vanish from the report with no error or warning, which is a bad failure mode for a
+tool whose whole point is trustworthy comparison numbers. `load_model_specs` now raises
+`ValueError` up front, matching the existing duplicate-task-id convention.
 
 Natural next step: scaling `long_context_recall` up to a real multi-thousand-token corpus
 run against a live provider (the current fixtures are a small-scale proxy, not a real
