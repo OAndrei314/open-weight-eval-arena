@@ -11,10 +11,10 @@ models:
     input_cost_per_million: 0.0
     output_cost_per_million: 0.0
 
-  - name: deepseek-v4
+  - name: deepseek-v4.1-flash
     provider: openai_compat
     base_url: https://openrouter.ai/api/v1
-    model: deepseek/deepseek-v4
+    model: deepseek/deepseek-v4.1-flash
     api_key_env: OPENROUTER_API_KEY
     input_cost_per_million: 0.0
     output_cost_per_million: 0.0

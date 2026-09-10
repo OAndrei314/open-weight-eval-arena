@@ -41,6 +41,7 @@ def build_report(results_dir: str | Path) -> str:
 
     lines = ["# Arena Report", ""]
     header = [
+        "rank",
         "model",
         "overall",
         *categories,
@@ -52,7 +53,8 @@ def build_report(results_dir: str | Path) -> str:
     lines.append("| " + " | ".join(header) + " |")
     lines.append("| " + " | ".join(["---"] * len(header)) + " |")
 
-    for model, recs in sorted(by_model.items()):
+    computed = []
+    for model, recs in by_model.items():
         overall = sum(r["score"] for r in recs) / len(recs)
         avg_latency = sum(r["latency_s"] for r in recs) / len(recs)
         total_cost = sum(r.get("estimated_cost_usd", 0.0) for r in recs)
@@ -65,7 +67,17 @@ def build_report(results_dir: str | Path) -> str:
             f"{(sum(by_cat[c]) / len(by_cat[c])):.2f}" if by_cat[c] else "-" for c in categories
         ]
         error_count = sum(1 for r in recs if r.get("error"))
+        computed.append((model, overall, cat_scores, avg_latency, cost_per_1k, score_per_usd, error_count))
+
+    # Ranked by overall score (descending) since this is a leaderboard, not an
+    # alphabetical listing -- ties broken by model name for a deterministic order.
+    computed.sort(key=lambda row: (-row[1], row[0]))
+
+    for rank, (model, overall, cat_scores, avg_latency, cost_per_1k, score_per_usd, error_count) in enumerate(
+        computed, start=1
+    ):
         row = [
+            str(rank),
             model,
             f"{overall:.2f}",
             *cat_scores,

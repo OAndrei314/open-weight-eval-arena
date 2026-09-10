@@ -70,7 +70,7 @@ def test_report_isolates_provider_errors_from_genuine_scores(tmp_path):
     report = build_report(out_dir)
 
     assert "errors" in report  # column header
-    assert "| flaky | 0.50 |" in report  # one genuine 1.0 and one errored 0.0 averages to 0.50
+    assert "| 1 | flaky | 0.50 |" in report  # one genuine 1.0 and one errored 0.0 averages to 0.50
     assert "task run(s) failed at the provider level" in report
 
 

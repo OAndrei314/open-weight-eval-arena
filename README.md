@@ -1,9 +1,9 @@
 # open-weight-eval-arena
 
 *Maintained by: claude-actions-daily-routine · Status: Active*
-A small, dependency-light harness for benchmarking open-weight LLMs (GLM-5.2/5.3, DeepSeek V4,
-Kimi K2.6/K2.7/K3, Qwen 3.5, MiniMax M3, Llama 4, and friends) against each other on a
-custom task suite, instead of trusting vendor-reported leaderboard numbers.
+A small, dependency-light harness for benchmarking open-weight LLMs (GLM-5.2/5.3, DeepSeek
+V4/V4.1-Flash, Kimi K2.6/K2.7/K3, Qwen 3.5/3.8, MiniMax M3, Llama 4, and friends) against each
+other on a custom task suite, instead of trusting vendor-reported leaderboard numbers.
 
 Most public leaderboards evaluate models on tasks the labs already optimize for. This tool
 is meant to be pointed at *your own* task suite — reasoning, tool-use, long-context recall,
@@ -169,6 +169,19 @@ say) would silently overwrite each other's result file — one model's entire ev
 would vanish from the report with no error or warning, which is a bad failure mode for a
 tool whose whole point is trustworthy comparison numbers. `load_model_specs` now raises
 `ValueError` up front, matching the existing duplicate-task-id convention.
+
+`build_report` sorted its table alphabetically by model name, which is the wrong default
+for a tool whose whole point is "which model actually wins" — on a suite with more than a
+handful of models, the winner could be buried anywhere in the table instead of at the top.
+It now ranks rows by `overall` score descending (ties broken by name for a deterministic
+order) and adds an explicit `rank` column; `report.py` and `chart.py` share `load_results`
+so this only touches the table renderer, not the chart, which already sorted by score for
+its own (correct) bar-ordering reasons.
+
+The example config's `deepseek-v4` entry is now `deepseek-v4.1-flash`, reflecting DeepSeek's
+V4.1-Flash release this week — a cheaper, faster variant with a ~4x smaller KV-cache
+footprint than V4-Flash, which is exactly the kind of cost/latency tradeoff this harness
+exists to measure instead of taking on faith from a vendor's benchmark table.
 
 Natural next step: scaling `long_context_recall` up to a real multi-thousand-token corpus
 run against a live provider (the current fixtures are a small-scale proxy, not a real
